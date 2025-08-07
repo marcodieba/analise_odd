@@ -1,13 +1,12 @@
 import React from 'react';
-import NotificationPanel from './NotificationPanel.jsx';
 
-const NavBar = ({ activePage, setActivePage, notifications }) => {
+const NavBar = ({ activePage, setActivePage }) => {
     const NavButton = ({ pageName, children }) => {
         const isActive = activePage === pageName;
         return (
             <button
                 onClick={() => setActivePage(pageName)}
-                className={`px-3 py-2 text-sm md:text-base rounded-md font-medium transition-colors duration-200 ${
+                className={`w-full md:w-auto px-3 py-2 text-sm rounded-md font-medium transition-colors duration-200 ${
                     isActive 
                         ? 'bg-emerald-600 text-white' 
                         : 'text-gray-400 hover:bg-gray-700 hover:text-white'
@@ -19,14 +18,14 @@ const NavBar = ({ activePage, setActivePage, notifications }) => {
     };
 
     return (
-        <nav className="bg-gray-800 p-2 rounded-lg flex justify-center items-center space-x-1 md:space-x-2 flex-wrap">
-            <NavButton pageName="deepAnalysis">🔍 Análise Profunda</NavButton> {/* Alterado de 'analyzer' */}
+        <nav className="bg-gray-800 p-2 rounded-lg flex flex-col md:flex-row md:justify-center items-center space-y-1 md:space-y-0 md:space-x-2">
+            <NavButton pageName="gameAnalysis">🔍 Análise de Jogo</NavButton>
             <NavButton pageName="green">✅ Análise Green</NavButton>
             <NavButton pageName="hunter">🎯 Caçador de Odds</NavButton>
-            <NavButton pageName="stats">📊 Centro de Stats</NavButton>
             <NavButton pageName="live">🔴 Análise Ao Vivo</NavButton>
             <NavButton pageName="tracker">📈 Bet Tracker</NavButton>
             <NavButton pageName="alerts">🔔 Alertas</NavButton>
+            <NavButton pageName="profile">👤 Perfil</NavButton> {/* BOTÃO NOVO */}
             <NavButton pageName="settings">⚙️ Configurações</NavButton>
         </nav>
     );

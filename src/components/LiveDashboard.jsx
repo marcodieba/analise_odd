@@ -207,4 +207,4 @@ export default function LiveDashboard({ game, onBack, apiKey }) {
             </div>
         </div>
     );
-};
+}

@@ -7,27 +7,55 @@ import { auth, db } from './firebase';
 
 import NavBar from './components/NavBar.jsx';
 import NotificationPanel from './components/NotificationPanel.jsx';
-import DeepAnalysisPage from './pages/DeepAnalysisPage.jsx';
-import MultipleBuilderPage from './pages/MultipleBuilderPage.jsx'; // Nome corrigido
+import GameAnalysisPage from './pages/GameAnalysisPage.jsx';
+import MultipleBuilderPage from './pages/MultipleBuilderPage.jsx';
 import LiveAnalysisPage from './pages/LiveAnalysisPage.jsx';
 import BetTrackerPage from './pages/BetTrackerPage.jsx';
 import AlertsPage from './pages/AlertsPage.jsx';
 import AuthPage from './pages/AuthPage.jsx';
 import GreenAnalysisPage from './pages/GreenAnalysisPage.jsx';
-import StatsCenterPage from './pages/StatsCenterPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
+import ProfilePage from './pages/ProfilePage.jsx';
 
 const API_HOST = 'api-football-v1.p.rapidapi.com';
 
+// NOVO: Componente para exibir um erro claro se a chave da API não for encontrada
+const ApiKeyError = () => (
+    <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="w-full max-w-2xl bg-red-900/50 border border-red-500/50 p-8 rounded-lg shadow-lg text-center">
+            <h1 className="text-3xl font-bold text-red-300 mb-4">Erro de Configuração</h1>
+            <p className="text-red-200 mb-6">
+                A chave da API-Football não foi encontrada. A aplicação não pode buscar dados sem ela.
+            </p>
+            <div className="bg-gray-800 p-4 rounded-md text-left">
+                <p className="font-bold text-white">Como corrigir:</p>
+                <ol className="list-decimal list-inside mt-2 text-gray-300 space-y-2">
+                    <li>Na pasta raiz do seu projeto (a mesma pasta de `package.json`), crie um arquivo chamado <code className="bg-gray-900 px-1 py-0.5 rounded text-emerald-400">.env.local</code>.</li>
+                    <li>Dentro deste arquivo, adicione a seguinte linha, substituindo `SUA_CHAVE_AQUI` pela sua chave real da RapidAPI:</li>
+                </ol>
+                <pre className="bg-gray-900 text-emerald-400 p-3 rounded-md mt-4 overflow-x-auto">
+                    <code>VITE_API_FOOTBALL_KEY=SUA_CHAVE_AQUI</code>
+                </pre>
+                <p className="mt-4 text-sm text-gray-400">Após salvar o arquivo, você **precisa reiniciar o servidor de desenvolvimento** (pare o processo no terminal e execute `npm run dev` novamente).</p>
+            </div>
+        </div>
+    </div>
+);
+
+
 function App() {
-  const [activePage, setActivePage] = useState('deepAnalysis');
+  // A chave da API é lida do ambiente uma única vez aqui.
+  const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY;
+
+  const [activePage, setActivePage] = useState('gameAnalysis');
   const [currentUser, setCurrentUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
-
+  
   const [bankroll, setBankroll] = useState(1000);
   const [bets, setBets] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [userProfile, setUserProfile] = useState({});
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -46,8 +74,9 @@ function App() {
           setBankroll(data.bankroll || 1000);
           setBets(data.bets || []);
           setAlerts(data.alerts || []);
+          setUserProfile({ email: currentUser.email, name: data.name || '' });
         } else {
-          setDoc(userDocRef, { bankroll: 1000, bets: [], alerts: [] });
+          setDoc(userDocRef, { name: '', bankroll: 1000, bets: [], alerts: [] });
         }
       });
 
@@ -70,6 +99,7 @@ function App() {
       setBets([]);
       setAlerts([]);
       setNotifications([]);
+      setUserProfile({});
     }
   }, [currentUser]);
 
@@ -78,17 +108,9 @@ function App() {
     const userDocRef = doc(db, 'users', currentUser.uid);
     await setDoc(userDocRef, data, { merge: true });
   };
-
+  
   const handleAddBet = (newBet) => {
-    const updatedBets = [
-        ...bets,
-        {
-            id: Date.now(),
-            ...newBet,
-            result: 'Pendente',
-            profit: 0,
-        }
-    ];
+    const updatedBets = [...bets, { id: Date.now(), ...newBet, result: 'Pendente', profit: 0 }];
     handleSetData({ bets: updatedBets });
     setActivePage('tracker'); 
   };
@@ -107,8 +129,16 @@ function App() {
   const handleSetAlerts = (newAlerts) => {
     handleSetData({ alerts: newAlerts });
   };
+  
+  const handleUpdateProfile = (profileData) => {
+    handleSetData(profileData);
+  };
 
-  const handleResolveBets = async (apiKey) => {
+  const handleResolveBets = async () => {
+    if (!apiKey) {
+      alert("A chave da API não está configurada no projeto.");
+      return;
+    }
     const pendingBets = bets.filter(bet => bet.result === 'Pendente' && bet.fixtureId);
     if (pendingBets.length === 0) {
         alert("Não há apostas pendentes para resolver.");
@@ -135,18 +165,16 @@ function App() {
             const awayGoals = goals.away;
             let isBetWon = false;
 
-            // Lógica de resolução simplificada, adicione mais mercados se necessário
             switch (bet.market) {
                 case 'Resultado Final':
-                    if (bet.outcome === 'Casa') isBetWon = homeGoals > awayGoals;
-                    else if (bet.outcome === 'Empate') isBetWon = homeGoals === awayGoals;
-                    else if (bet.outcome === 'Visitante') isBetWon = homeGoals < awayGoals;
+                    if (bet.outcome.includes('Casa')) isBetWon = homeGoals > awayGoals;
+                    else if (bet.outcome.includes('Empate')) isBetWon = homeGoals === awayGoals;
+                    else if (bet.outcome.includes('Visitante')) isBetWon = homeGoals < awayGoals;
                     break;
                 case 'Ambas Marcam':
                     if (bet.outcome === 'Sim') isBetWon = homeGoals > 0 && awayGoals > 0;
                     else if (bet.outcome === 'Não') isBetWon = homeGoals === 0 || awayGoals === 0;
                     break;
-                // Adicione outros casos de mercado aqui
             }
 
             const stakeAmount = (bet.stake / 100) * bankroll;
@@ -157,16 +185,6 @@ function App() {
             };
         });
         
-        const fixtureIdsRequested = pendingBets.map(b => b.fixtureId);
-        const fixtureIdsResolved = resolvedFixtures.map(f => f.fixture.id);
-
-        updatedBets = updatedBets.map(bet => {
-            if (bet.result === 'Pendente' && fixtureIdsRequested.includes(bet.fixtureId) && !fixtureIdsResolved.includes(bet.fixtureId)) {
-                return { ...bet, result: 'Erro' };
-            }
-            return bet;
-        });
-
         handleSetData({ bets: updatedBets });
     } catch (err) {
         alert(`Erro ao resolver apostas: ${err.message}`);
@@ -177,6 +195,11 @@ function App() {
     return <div className="bg-gray-900 min-h-screen flex items-center justify-center text-white">A carregar...</div>;
   }
 
+  // NOVO: Verificação crucial da chave da API. Se não existir, mostra o erro.
+  if (!apiKey) {
+      return <ApiKeyError />;
+  }
+
   return (
       <div className="bg-gray-900 text-white min-h-screen font-sans p-4 sm:p-6 lg:p-8">
         {currentUser ? (
@@ -185,19 +208,19 @@ function App() {
                 <div className="flex-1"></div>
                 <NavBar activePage={activePage} setActivePage={setActivePage} />
                 <div className="flex-1 flex justify-end items-center space-x-4">
+                    <span className="text-sm text-gray-400 hidden md:block">{userProfile.name || currentUser.email}</span>
                     <NotificationPanel notifications={notifications} />
-                    <span className="text-sm text-gray-400 hidden md:block">{currentUser.email}</span>
                     <button onClick={() => signOut(auth)} className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded-md">Sair</button>
                 </div>
             </header>
             <main>
-              {activePage === 'deepAnalysis' && <DeepAnalysisPage onRegisterBet={handleAddBet} />}
+              {activePage === 'gameAnalysis' && <GameAnalysisPage onRegisterBet={handleAddBet} />}
               {activePage === 'green' && <GreenAnalysisPage />}
               {activePage === 'hunter' && <MultipleBuilderPage />}
-              {activePage === 'stats' && <StatsCenterPage />}
               {activePage === 'live' && <LiveAnalysisPage />}
               {activePage === 'tracker' && <BetTrackerPage bets={bets} bankroll={bankroll} setBankroll={handleSetBankroll} onResolveBets={handleResolveBets} onDeleteBet={handleDeleteBet} setActivePage={setActivePage} />}
               {activePage === 'alerts' && <AlertsPage alerts={alerts} setAlerts={handleSetAlerts} />}
+              {activePage === 'profile' && <ProfilePage currentUser={userProfile} onUpdateProfile={handleUpdateProfile} />}
               {activePage === 'settings' && <SettingsPage />} 
             </main>
           </>

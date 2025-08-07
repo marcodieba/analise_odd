@@ -48,4 +48,4 @@ export default function StrategicBetCard({ bet, onRegister }) {
             </div>
         </div>
     );
-};
+}

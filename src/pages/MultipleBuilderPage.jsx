@@ -7,35 +7,68 @@ import CorrectScorePanel from '../components/CorrectScorePanel.jsx';
 import UnifiedFixtureCard from '../components/UnifiedFixtureCard.jsx';
 import FixtureErrorCard from '../components/FixtureErrorCard.jsx';
 
-// ... (Componentes MultipleBetSlip, UnifiedFixtureCard, LeagueAccordion permanecem iguais)
-const MultipleBetSlip = ({ selectedBets, onRemove }) => {
+// --- Componente do Boletim de Aposta (AGORA COM SIMULAÇÃO) ---
+const MultipleBetSlip = ({ selectedBets, onRemove, onClear }) => {
+    const [stake, setStake] = useState(10); // Estado para o valor da aposta
     const totalOdd = selectedBets.reduce((acc, bet) => acc * bet.odd, 1);
+    const potentialReturn = totalOdd * stake; // Cálculo do retorno potencial
+
     return (
         <div className="bg-gray-900/50 p-4 rounded-lg sticky top-4">
-            <h3 className="text-lg font-bold text-emerald-400 mb-4">Seu Boletim de Múltipla</h3>
-            {selectedBets.length === 0 ? (<p className="text-sm text-gray-400 text-center">Adicione apostas para criar a sua múltipla.</p>) : (
-                <div className="space-y-2">
-                    {selectedBets.map((bet, index) => (
-                        <div key={index} className="bg-gray-800 p-2 rounded-md flex justify-between items-center text-sm">
-                            <div>
-                                <p className="font-bold text-white">{bet.outcome}</p>
-                                <p className="text-xs text-gray-400">{bet.fixtureName}</p>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-emerald-400">Seu Boletim</h3>
+                {selectedBets.length > 0 && (
+                    <button onClick={onClear} className="text-xs text-red-400 hover:text-red-300">
+                        Limpar
+                    </button>
+                )}
+            </div>
+
+            {selectedBets.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">Adicione apostas para criar a sua múltipla.</p>
+            ) : (
+                <>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                        {selectedBets.map((bet, index) => (
+                            <div key={index} className="bg-gray-800 p-2 rounded-md flex justify-between items-center text-sm">
+                                <div>
+                                    <p className="font-bold text-white">{bet.outcome}</p>
+                                    <p className="text-xs text-gray-400">{bet.fixtureName}</p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <span className="font-mono text-white">{bet.odd.toFixed(2)}</span>
+                                    <button onClick={() => onRemove(bet)} className="text-red-500 hover:text-red-400 text-lg leading-none">&times;</button>
+                                </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                                <span className="font-mono text-white">{bet.odd.toFixed(2)}</span>
-                                <button onClick={() => onRemove(bet)} className="text-red-500 text-lg">&times;</button>
-                            </div>
-                        </div>
-                    ))}
-                    <div className="border-t border-gray-700 pt-4 mt-4 text-center">
-                        <p className="text-gray-400">Odd Total</p>
-                        <p className="text-3xl font-bold text-emerald-400">{totalOdd.toFixed(2)}</p>
+                        ))}
                     </div>
-                </div>
+                    <div className="border-t border-gray-700 pt-4 mt-4 space-y-4">
+                        <div className="flex justify-between items-center">
+                            <p className="text-gray-400">Odd Total</p>
+                            <p className="text-2xl font-bold text-emerald-400">{totalOdd.toFixed(2)}</p>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <label htmlFor="stake-input" className="text-gray-400">Valor (R$)</label>
+                            <input
+                                id="stake-input"
+                                type="number"
+                                value={stake}
+                                onChange={(e) => setStake(parseFloat(e.target.value) || 0)}
+                                className="bg-gray-700 border border-gray-600 rounded-md w-24 p-2 text-right text-white font-mono"
+                            />
+                        </div>
+                        <div className="flex justify-between items-center bg-gray-800 p-3 rounded-lg">
+                            <p className="text-gray-400">Retorno Potencial</p>
+                            <p className="text-xl font-bold text-emerald-400">R$ {potentialReturn.toFixed(2)}</p>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );
 };
+
+
 const LeagueAccordion = ({ league, fixtures, selectedFixtures, onToggleFixture }) => {
     const [isOpen, setIsOpen] = useState(true);
     return (
@@ -203,7 +236,11 @@ export default function MultipleBuilderPage() {
                             <SuggestedMultipleCard suggestedBets={suggestedBets} />
                         </>
                     )}
-                    <MultipleBetSlip selectedBets={selectedBets} onRemove={handleToggleBetInSlip} />
+                    <MultipleBetSlip 
+                        selectedBets={selectedBets} 
+                        onRemove={handleToggleBetInSlip} 
+                        onClear={() => setSelectedBets([])} // Passando a função para limpar
+                    />
                 </div>
             </div>
             <div className="mt-8">

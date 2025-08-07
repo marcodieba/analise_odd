@@ -1,6 +1,7 @@
 import { getCache, setCache } from './cache.js';
 
-const API_HOST = 'api-football-v1.p.rapidapi.com';
+// Lê o HOST e a KEY a partir das variáveis de ambiente
+const API_HOST = import.meta.env.VITE_API_HOST;
 const API_KEY = import.meta.env.VITE_API_FOOTBALL_KEY;
 
 /**
@@ -21,6 +22,7 @@ export const apiFetch = async (endpoint) => {
     console.log(`[Cache MISS] Buscando dados da API para: ${cacheKey}`);
 
     try {
+        // A lógica de fetch agora usa a variável API_HOST lida do .env.local
         const response = await fetch(`https://${API_HOST}/${endpoint}`, {
             method: 'GET',
             headers: { 'x-rapidapi-host': API_HOST, 'x-rapidapi-key': API_KEY },

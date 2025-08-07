@@ -1,17 +1,21 @@
+// src/firebase.js
+
 // Importa as funções necessárias do SDK do Firebase
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getMessaging } from "firebase/messaging"; // Importa o messaging
 
-// TODO: Adicione a configuração do seu projeto Firebase
+// A configuração do Firebase agora lê as variáveis de ambiente seguras
+// do ficheiro .env.local que criámos.
 const firebaseConfig = {
-  apiKey: "AIzaSyDy6RDgvLihFH0tNtJsl0_H3n6nHPbYl_Q",
-  authDomain: "analisador-de-odds-pro.firebaseapp.com",
-  projectId: "analisador-de-odds-pro",
-  storageBucket: "analisador-de-odds-pro.firebasestorage.app",
-  messagingSenderId: "21878356127",
-  appId: "1:21878356127:web:90b959e92c7b6c3e1c0aaa",
-  measurementId: "G-1KSGQRLRVH"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Inicializa o Firebase
@@ -20,3 +24,4 @@ const app = initializeApp(firebaseConfig);
 // Exporta os serviços que vamos usar na nossa aplicação
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const messaging = getMessaging(app); // Exporta o messaging

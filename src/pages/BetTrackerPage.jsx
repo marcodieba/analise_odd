@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { 
+    LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, 
+    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 
 const StatCard = ({ title, value, color }) => (
     <div className="bg-gray-800 p-4 rounded-lg text-center">
@@ -8,7 +11,6 @@ const StatCard = ({ title, value, color }) => (
     </div>
 );
 
-// Novo componente para o estado vazio
 const EmptyState = ({ onNavigate }) => (
     <div className="text-center bg-gray-800 p-16 rounded-lg">
         <h3 className="text-2xl font-bold text-white mb-2">Ainda não há apostas registadas.</h3>
@@ -17,18 +19,23 @@ const EmptyState = ({ onNavigate }) => (
             onClick={onNavigate}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-lg transition"
         >
-            Ir para a Análise Profunda
+            Ir para a Análise de Jogo
         </button>
     </div>
 );
-
 
 export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveBets, onDeleteBet, setActivePage }) {
     const [profit, setProfit] = useState(0);
     const [roi, setRoi] = useState(0);
     const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY;
-    const [chartData, setChartData] = useState([]);
+    
+    // Estados para os dados dos gráficos
+    const [evolutionData, setEvolutionData] = useState([]);
     const [marketData, setMarketData] = useState([]);
+    const [performanceData, setPerformanceData] = useState([]);
+    const [leagueData, setLeagueData] = useState([]);
+
+    const COLORS = { Ganha: '#38B2AC', Perdida: '#E53E3E', Pendente: '#F6E05E' };
 
     useEffect(() => {
         const resolvedBets = bets.filter(bet => bet.result !== 'Pendente');
@@ -39,26 +46,40 @@ export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveB
         setProfit(totalProfit);
         setRoi(currentRoi);
 
-        // Prepara os dados para o gráfico de evolução
+        // 1. Dados para o gráfico de evolução da banca
         let cumulativeProfit = 0;
-        const evolutionData = resolvedBets.map((bet, index) => {
+        const evolutionChartData = resolvedBets.map((bet, index) => {
             cumulativeProfit += bet.profit;
             return { name: `Aposta ${index + 1}`, Lucro: cumulativeProfit, Banca: bankroll + cumulativeProfit };
         });
-        setChartData(evolutionData);
+        setEvolutionData(evolutionChartData);
 
-        // Prepara os dados para o gráfico de lucro por mercado
+        // 2. Dados para o gráfico de lucro por mercado
         const profitByMarket = resolvedBets.reduce((acc, bet) => {
-            const marketType = bet.market.split(':')[0].trim(); // Agrupa por tipo de mercado
-            if (!acc[marketType]) {
-                acc[marketType] = 0;
-            }
+            const marketType = bet.market.split(' ')[0].trim(); // Agrupa por tipo (ex: "Casa", "Mais", "Ambas")
+            if (!acc[marketType]) acc[marketType] = 0;
             acc[marketType] += bet.profit;
             return acc;
         }, {});
+        setMarketData(Object.entries(profitByMarket).map(([name, Lucro]) => ({ name, Lucro })));
 
-        const marketChartData = Object.entries(profitByMarket).map(([name, Lucro]) => ({ name, Lucro }));
-        setMarketData(marketChartData);
+        // 3. Dados para o gráfico de desempenho (ganhas/perdidas)
+        const performanceCounts = bets.reduce((acc, bet) => {
+            acc[bet.result] = (acc[bet.result] || 0) + 1;
+            return acc;
+        }, {});
+        setPerformanceData(Object.entries(performanceCounts).map(([name, value]) => ({ name, value })));
+        
+        // 4. Dados para o gráfico de lucro por liga (extraindo nome da liga do nome do jogo)
+        const profitByLeague = resolvedBets.reduce((acc, bet) => {
+             // Tenta extrair o nome da liga do fixture, se disponível
+            const leagueName = bet.fixture.split(' - ')[0] || 'Desconhecida';
+            if (!acc[leagueName]) acc[leagueName] = 0;
+            acc[leagueName] += bet.profit;
+            return acc;
+        }, {});
+        setLeagueData(Object.entries(profitByLeague).map(([name, Lucro]) => ({ name, Lucro })));
+
 
     }, [bets, bankroll]);
 
@@ -80,10 +101,11 @@ export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveB
                     </div>
                     
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        {/* Gráfico de Evolução */}
                         <div className="bg-gray-800 p-6 rounded-lg">
                             <h3 className="text-lg font-bold text-white mb-4">Evolução da Banca</h3>
                             <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={chartData}>
+                                <LineChart data={evolutionData}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
                                     <XAxis dataKey="name" stroke="#A0AEC0" />
                                     <YAxis stroke="#A0AEC0" />
@@ -93,16 +115,46 @@ export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveB
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
+                        {/* Gráfico de Desempenho */}
+                        <div className="bg-gray-800 p-6 rounded-lg">
+                             <h3 className="text-lg font-bold text-white mb-4">Desempenho Geral</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                               <PieChart>
+                                    <Pie data={performanceData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                                        {performanceData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[entry.name]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip contentStyle={{ backgroundColor: '#2D3748', border: 'none' }} />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        {/* Gráfico de Lucro por Mercado */}
                          <div className="bg-gray-800 p-6 rounded-lg">
                             <h3 className="text-lg font-bold text-white mb-4">Lucro por Mercado</h3>
                             <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={marketData}>
+                                <BarChart data={marketData} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                                    <XAxis dataKey="name" stroke="#A0AEC0" />
-                                    <YAxis stroke="#A0AEC0" />
-                                    <Tooltip contentStyle={{ backgroundColor: '#2D3748', border: 'none' }} />
+                                    <XAxis type="number" stroke="#A0AEC0" />
+                                    <YAxis type="category" dataKey="name" stroke="#A0AEC0" width={80} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#2D3748', border: 'none' }} cursor={{fill: '#4A5568'}} />
                                     <Legend />
                                     <Bar dataKey="Lucro" fill="#38B2AC" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        {/* Gráfico de Lucro por Liga */}
+                         <div className="bg-gray-800 p-6 rounded-lg">
+                            <h3 className="text-lg font-bold text-white mb-4">Lucro por Liga</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={leagueData} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                                    <XAxis type="number" stroke="#A0AEC0" />
+                                    <YAxis type="category" dataKey="name" stroke="#A0AEC0" width={80} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#2D3748', border: 'none' }} cursor={{fill: '#4A5568'}} />
+                                    <Legend />
+                                    <Bar dataKey="Lucro" fill="#3182CE" />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -122,8 +174,8 @@ export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveB
                         <div className="w-full md:w-auto">
                             <button 
                                 onClick={() => onResolveBets(apiKey)}
-                                disabled={!apiKey || apiKey === 'SUA_CHAVE_API_AQUI'}
-                                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={!apiKey}
+                                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 px-6 rounded-lg disabled:opacity-50"
                             >
                                 Atualizar Resultados
                             </button>
@@ -132,7 +184,7 @@ export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveB
                     
                     <div className="bg-gray-800 rounded-lg overflow-x-auto">
                         <table className="w-full text-sm text-left text-gray-400">
-                            <thead className="text-xs text-gray-300 uppercase bg-gray-700">
+                             <thead className="text-xs text-gray-300 uppercase bg-gray-700">
                                 <tr>
                                     <th scope="col" className="px-6 py-3">Jogo</th>
                                     <th scope="col" className="px-6 py-3">Mercado</th>
@@ -144,7 +196,7 @@ export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveB
                                 </tr>
                             </thead>
                             <tbody>
-                                {bets.map(bet => (
+                                {[...bets].reverse().map(bet => (
                                     <tr key={bet.id} className="border-b border-gray-700">
                                         <th scope="row" className="px-6 py-4 font-medium text-white whitespace-nowrap">{bet.fixture}</th>
                                         <td className="px-6 py-4">{bet.market}</td>
@@ -179,7 +231,7 @@ export default function BetTrackerPage({ bets, bankroll, setBankroll, onResolveB
                     </div>
                 </>
             ) : (
-                <EmptyState onNavigate={() => setActivePage('deepAnalysis')} />
+                <EmptyState onNavigate={() => setActivePage('gameAnalysis')} />
             )}
         </div>
     );

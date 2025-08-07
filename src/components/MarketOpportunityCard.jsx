@@ -56,4 +56,14 @@ const MarketOpportunityCard = ({ marketTitle, outcomes, onRegister }) => {
     );
 };
 
-export default MarketOpportunityCard;
+const MarketsList = ({ marketsWithValue = {}, handleRegister }) => {
+    return (
+        <div>
+            {Object.entries(marketsWithValue).length > 0 && Object.entries(marketsWithValue).map(([market, outcomes]) => (
+                <MarketOpportunityCard key={market} marketTitle={market} outcomes={outcomes} onRegister={(betData) => handleRegister(betData)} />
+            ))}
+        </div>
+    );
+};
+
+export default MarketsList;
