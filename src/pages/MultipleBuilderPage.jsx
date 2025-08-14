@@ -4,17 +4,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAnalysisEngine } from '../hooks/useAnalysisEngine';
 import SuggestedMultipleCard from '../components/SuggestedMultipleCard.jsx';
 import CorrectScorePanel from '../components/CorrectScorePanel.jsx';
-import UnifiedFixtureCard from '../components/UnifiedFixtureCard.jsx';
 import FixtureErrorCard from '../components/FixtureErrorCard.jsx';
+import { BetRow } from '../components/UnifiedFixtureCard.jsx';
 
-// --- Componente do Boletim de Aposta (AGORA COM SIMULAÇÃO) ---
+
+// --- Componente do Boletim de Aposta (sem alterações) ---
 const MultipleBetSlip = ({ selectedBets, onRemove, onClear }) => {
-    const [stake, setStake] = useState(10); // Estado para o valor da aposta
-    const totalOdd = selectedBets.reduce((acc, bet) => acc * bet.odd, 1);
-    const potentialReturn = totalOdd * stake; // Cálculo do retorno potencial
+    const [stake, setStake] = useState(10); 
+    const totalOdd = selectedBets.reduce((acc, bet) => acc * (bet.odd || 1), 1);
+    const potentialReturn = totalOdd * stake;
 
     return (
-        <div className="bg-gray-900/50 p-4 rounded-lg sticky top-4">
+        <div className="bg-gray-900/50 p-4 rounded-lg">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-bold text-emerald-400">Seu Boletim</h3>
                 {selectedBets.length > 0 && (
@@ -36,7 +37,7 @@ const MultipleBetSlip = ({ selectedBets, onRemove, onClear }) => {
                                     <p className="text-xs text-gray-400">{bet.fixtureName}</p>
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                    <span className="font-mono text-white">{bet.odd.toFixed(2)}</span>
+                                    <span className="font-mono text-white">{(bet.odd || 0).toFixed(2)}</span>
                                     <button onClick={() => onRemove(bet)} className="text-red-500 hover:text-red-400 text-lg leading-none">&times;</button>
                                 </div>
                             </div>
@@ -98,7 +99,7 @@ export default function MultipleBuilderPage() {
     const [leagues, setLeagues] = useState([]);
     const [fixturesByLeague, setFixturesByLeague] = useState({});
     const [selectedFixtures, setSelectedFixtures] = useState(new Set());
-    const [analysisResults, setAnalysisResults] = useState([]);
+    const [analysisResults, setAnalysisResults] = useState({});
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedBets, setSelectedBets] = useState([]);
     
@@ -108,19 +109,24 @@ export default function MultipleBuilderPage() {
         const month = String(today.getMonth() + 1).padStart(2, '0');
         const day = String(today.getDate()).padStart(2, '0');
         const formattedDate = `${year}-${month}-${day}`;
-        const endpoint = `v3/fixtures?date=${formattedDate}&timezone=America/Sao_Paulo`;
-        const fixturesData = await apiFetch(endpoint, false);
-        if (!fixturesData) return;
-        const leaguesMap = {};
-        const fixturesMap = {};
-        fixturesData.forEach(fixture => {
-            const leagueId = fixture.league.id;
-            if (!leaguesMap[leagueId]) leaguesMap[leagueId] = { id: leagueId, name: fixture.league.name, country: fixture.league.country };
-            if (!fixturesMap[leagueId]) fixturesMap[leagueId] = [];
-            fixturesMap[leagueId].push(fixture);
-        });
-        setLeagues(Object.values(leaguesMap).sort((a, b) => a.country.localeCompare(b.country) || a.name.localeCompare(b.name)));
-        setFixturesByLeague(fixturesMap);
+        
+        try {
+            const fixturesData = await apiFetch(`v3/fixtures?date=${formattedDate}&timezone=America/Sao_Paulo`, false);
+            if (!fixturesData) return;
+            
+            const leaguesMap = {};
+            const fixturesMap = {};
+            fixturesData.forEach(fixture => {
+                const leagueId = fixture.league.id;
+                if (!leaguesMap[leagueId]) leaguesMap[leagueId] = { id: leagueId, name: fixture.league.name, country: fixture.league.country };
+                if (!fixturesMap[leagueId]) fixturesMap[leagueId] = [];
+                fixturesMap[leagueId].push(fixture);
+            });
+            setLeagues(Object.values(leaguesMap).sort((a, b) => a.country.localeCompare(b.country) || a.name.localeCompare(b.name)));
+            setFixturesByLeague(fixturesMap);
+        } catch (e) {
+            console.error("Falha ao buscar jogos do dia:", e);
+        }
     }, [apiFetch]);
 
     useEffect(() => {
@@ -144,10 +150,15 @@ export default function MultipleBuilderPage() {
     };
 
     const handleAnalyzeSelection = async () => {
-        setAnalysisResults([]);
         const allFixtures = Object.values(fixturesByLeague).flat();
         const fixturesToAnalyze = allFixtures.filter(f => selectedFixtures.has(f.fixture.id));
-        
+
+        const initialResults = {};
+        fixturesToAnalyze.forEach(f => {
+            initialResults[f.fixture.id] = { status: 'loading' };
+        });
+        setAnalysisResults(initialResults);
+
         const groupedByLeague = fixturesToAnalyze.reduce((acc, fixture) => {
             const leagueId = fixture.league.id;
             if (!acc[leagueId]) acc[leagueId] = [];
@@ -155,15 +166,19 @@ export default function MultipleBuilderPage() {
             return acc;
         }, {});
 
-        const allPromiseResults = [];
         for (const leagueId in groupedByLeague) {
             const leagueContext = await fetchLeagueContext(leagueId);
             const fixturesInLeague = groupedByLeague[leagueId];
-            const analysisPromises = fixturesInLeague.map(fixture => runFullAnalysis(fixture, leagueContext));
-            const leagueResults = await Promise.all(analysisPromises);
-            allPromiseResults.push(...leagueResults);
+
+            for (const fixture of fixturesInLeague) {
+                runFullAnalysis(fixture, leagueContext).then(result => {
+                    setAnalysisResults(prevResults => ({
+                        ...prevResults,
+                        [fixture.fixture.id]: { status: 'done', data: result }
+                    }));
+                });
+            }
         }
-        setAnalysisResults(allPromiseResults);
     };
     
     const filteredLeagues = leagues.map(league => {
@@ -187,21 +202,26 @@ export default function MultipleBuilderPage() {
         );
     };
 
-    const highProbValuableBets = analysisResults
+    const successfulAnalyses = Object.values(analysisResults)
+        .filter(res => res.status === 'done' && res.data && !res.data.error)
+        .map(res => res.data);
+
+    const highProbValuableBets = successfulAnalyses
         .flatMap(result => result.valuableBets || [])
         .filter(bet => bet.prob > 0.55)
         .sort((a, b) => b.prob - a.prob);
 
-    const betsByFixture = highProbValuableBets.reduce((acc, bet) => {
-        if (!acc[bet.fixtureName]) acc[bet.fixtureName] = [];
-        acc[bet.fixtureName].push(bet);
-        return acc;
-    }, {});
-
     const suggestedBets = highProbValuableBets.slice(0, 4);
     
-    const successfulAnalyses = analysisResults.filter(result => !result.error);
-    const failedAnalyses = analysisResults.filter(result => result.error);
+    // *** ALTERADO: A lista de mercados agora inclui novamente os mercados secundários. ***
+    const marketsOrder = [
+        'Resultado Final',
+        'Total de Golos',
+        'Ambas Marcam',
+        'Total de Cantos',
+        'Total de Chutes ao Gol',
+        'Placar Exato'
+    ];
 
     return (
         <div className="max-w-7xl mx-auto">
@@ -209,58 +229,96 @@ export default function MultipleBuilderPage() {
                 <h1 className="text-4xl font-bold text-emerald-400">🛠️ Criador de Múltiplas</h1>
                 <p className="text-gray-400 mt-2">Selecione os jogos, analise as oportunidades e construa a sua múltipla com base em dados.</p>
             </header>
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                <div className="lg:col-span-3">
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                
+                <div className="lg:col-span-1 space-y-6 lg:sticky lg:top-6">
                     <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
                         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                             <h2 className="text-2xl font-bold text-white">Jogos do Dia</h2>
-                            <button onClick={handleAnalyzeSelection} disabled={loading || selectedFixtures.size === 0} className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded-lg disabled:opacity-50">
-                                {loading ? 'A Analisar...' : `Analisar ${selectedFixtures.size} Jogo(s)`}
-                            </button>
                         </div>
                         <div className="mb-4">
-                            <input type="text" placeholder="Filtrar por liga, país ou equipa..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-2 placeholder-gray-400"/>
+                            <input type="text" placeholder="Filtrar por liga ou equipa..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-2 placeholder-gray-400"/>
                         </div>
                         {error && <div className="bg-red-500/20 text-red-300 p-3 rounded-md mb-4">{error}</div>}
-                        <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+                        <div className="space-y-4 max-h-[40vh] overflow-y-auto pr-2">
                             {filteredLeagues.map(league => (
                                 <LeagueAccordion key={league.id} league={league} fixtures={league.fixtures} selectedFixtures={selectedFixtures} onToggleFixture={handleToggleFixture}/>
                             ))}
                         </div>
+                         <button onClick={handleAnalyzeSelection} disabled={loading || selectedFixtures.size === 0} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50">
+                            {loading ? 'A Analisar...' : `Analisar ${selectedFixtures.size} Jogo(s)`}
+                        </button>
                     </div>
-                </div>
-                <div className="lg:col-span-2 space-y-6">
-                    {analysisResults.length > 0 && (
-                        <>
-                            <CorrectScorePanel analysisResults={successfulAnalyses} />
-                            <SuggestedMultipleCard suggestedBets={suggestedBets} />
-                        </>
-                    )}
+
                     <MultipleBetSlip 
                         selectedBets={selectedBets} 
                         onRemove={handleToggleBetInSlip} 
-                        onClear={() => setSelectedBets([])} // Passando a função para limpar
+                        onClear={() => setSelectedBets([])}
                     />
                 </div>
-            </div>
-            <div className="mt-8">
-                <h2 className="text-2xl font-bold text-white mb-4">Oportunidades Encontradas (Prob. &gt; 55%)</h2>
-                {loading && <p className="text-center text-emerald-400">A processar análises...</p>}
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-                    {failedAnalyses.map((result, index) => (
-                        <FixtureErrorCard key={`error-${index}`} fixtureName={result.fixtureName} error={result.error} />
-                    ))}
-                    {Object.entries(betsByFixture).map(([fixtureName, bets]) => (
-                        <UnifiedFixtureCard key={fixtureName} fixtureName={fixtureName} bets={bets} onAddToSlip={handleToggleBetInSlip} selectedBets={selectedBets} />
-                    ))}
-                </div>
 
-                {!loading && analysisResults.length > 0 && Object.keys(betsByFixture).length === 0 && failedAnalyses.length === 0 && (
-                    <div className="text-center bg-gray-800 p-16 rounded-lg">
-                        <p className="text-gray-500">Nenhuma oportunidade com mais de 55% de probabilidade encontrada para os jogos selecionados.</p>
-                    </div>
-                )}
+                <div className="lg:col-span-2 space-y-6">
+                    {successfulAnalyses.length > 0 && (
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <SuggestedMultipleCard suggestedBets={suggestedBets} />
+                            <CorrectScorePanel analysisResults={successfulAnalyses} />
+                        </div>
+                    )}
+                    
+                    {Object.keys(analysisResults).length > 0 && (
+                        <div>
+                            <h2 className="text-2xl font-bold text-white mb-4">Resultados da Análise</h2>
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                {Object.entries(analysisResults).map(([fixtureId, result]) => {
+                                    if (result.status === 'loading') {
+                                        return <div key={fixtureId} className="bg-gray-800 p-4 rounded-lg shadow-lg animate-pulse h-48"></div>;
+                                    }
+
+                                    if (result.status === 'done') {
+                                        const analysis = result.data;
+                                        if (analysis.error) {
+                                            return <FixtureErrorCard key={fixtureId} fixtureName={analysis.fixtureName} error={analysis.error} />;
+                                        }
+
+                                        const valuableBets = (analysis.valuableBets || []).filter(bet => bet.prob > 0.55);
+                                        const betsByMarket = valuableBets.reduce((acc, bet) => {
+                                            if (!acc[bet.market]) acc[bet.market] = [];
+                                            acc[bet.market].push(bet);
+                                            return acc;
+                                        }, {});
+
+                                        return (
+                                            <div key={fixtureId} className="bg-gray-800 p-4 rounded-lg shadow-lg flex flex-col animate-fade-in">
+                                                <h3 className="text-lg font-bold text-white mb-3 text-center border-b border-gray-700 pb-2">{analysis.fixtureName}</h3>
+                                                {valuableBets.length > 0 ? (
+                                                    marketsOrder.map(market => (
+                                                        betsByMarket[market] && (
+                                                            <div key={market} className="mb-2">
+                                                                <span className="inline-block px-2 py-1 rounded bg-emerald-700 text-white text-xs font-bold mb-1">{market}</span>
+                                                                {betsByMarket[market].map((bet, idx) => (
+                                                                    <BetRow
+                                                                        key={idx}
+                                                                        bet={bet}
+                                                                        onAddToSlip={handleToggleBetInSlip}
+                                                                        isInSlip={selectedBets.some(b => b.fixtureName === bet.fixtureName && b.outcome === bet.outcome)}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        )
+                                                    ))
+                                                ) : (
+                                                    <p className="text-sm text-gray-500 text-center flex-grow flex items-center justify-center">Nenhuma oportunidade com valor (EV &gt; 3%) e probabilidade &gt; 55% encontrada.</p>
+                                                )}
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

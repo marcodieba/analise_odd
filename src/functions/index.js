@@ -29,8 +29,93 @@ const db = admin.firestore();
 const API_HOST = "api-football-v1.p.rapidapi.com";
 // A chave é lida de forma segura a partir da configuração das Funções
 const API_KEY = functions.config().apifootball.key;
+const GEMINI_API_KEY = functions.config().gemini.key; // *** NOVO: Chave da Gemini lida de forma segura
 const CURRENT_SEASON = new Date().getFullYear();
 const BOOKMAKER_ID = 8; // Bet365
+
+/**
+ * Função genérica para chamar a API do Google Gemini de forma segura.
+ * @param {string} prompt O prompt a ser enviado para o modelo.
+ * @returns {Promise<object>} O objeto JSON retornado pela API.
+ */
+const callGeminiAPI = async (prompt) => {
+    if (!GEMINI_API_KEY) {
+        functions.logger.error("A chave da API da Gemini não está configurada.");
+        throw new functions.https.HttpsError("internal", "A chave da API da Gemini não está configurada no servidor.");
+    }
+
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+    const payload = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+    };
+
+    const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        functions.logger.error("Erro na API Gemini:", response.status, errorBody);
+        throw new functions.https.HttpsError("internal", "Falha ao comunicar com a API de I.A.");
+    }
+
+    const result = await response.json();
+    const text = result.candidates[0].content.parts[0].text;
+    return JSON.parse(text);
+};
+
+
+// *** INÍCIO DAS NOVAS FUNÇÕES ***
+
+/**
+ * Cloud Function para analisar o sentimento de notícias de uma equipa.
+ */
+exports.analyzeSentiment = functions.https.onCall(async (data, context) => {
+    const { newsTitles, teamName } = data;
+
+    if (!newsTitles || !teamName) {
+        throw new functions.https.HttpsError("invalid-argument", "Faltam os parâmetros 'newsTitles' ou 'teamName'.");
+    }
+
+    const prompt = `Você é um analista desportivo. Com base nestes títulos de notícias sobre a equipa "${teamName}", analise o sentimento geral. Considere pressão, harmonia, lesões e confiança. Devolva um JSON com uma pontuação de "moral" de -5 (muito negativo) a +5 (muito positivo) e um "resumo" de uma frase. O JSON deve ter o formato: {"score": <numero>, "summary": "<resumo>"}`;
+
+    try {
+        const analysisResult = await callGeminiAPI(prompt);
+        return analysisResult;
+    } catch (error) {
+        functions.logger.error("Erro ao chamar a Gemini para análise de sentimento:", error);
+        // Retorna um erro específico que o frontend pode tratar
+        throw new functions.https.HttpsError("internal", "Falha na análise de sentimento pela I.A.", error.message);
+    }
+});
+
+
+/**
+ * Cloud Function para analisar táticas com base no histórico de confrontos diretos (H2H).
+ */
+exports.analyzeH2HTactics = functions.https.onCall(async (data, context) => {
+    const { formattedHistory, homeTeam, awayTeam } = data;
+
+    if (!formattedHistory || !homeTeam || !awayTeam) {
+        throw new functions.https.HttpsError("invalid-argument", "Faltam os parâmetros 'formattedHistory', 'homeTeam' ou 'awayTeam'.");
+    }
+
+    const prompt = `Você é um tático de futebol de elite. Com base nos dados dos últimos confrontos diretos entre ${homeTeam} e ${awayTeam}: "${formattedHistory}", identifique padrões táticos. Os jogos costumam ter muitos ou poucos golos? Existe um padrão de resultados que se repete? Devolva um JSON com "title" (um título para o padrão), "summary" (um resumo tático de uma frase), "prediction_btts" (previsão para Ambas Marcam: 'Sim', 'Não' ou 'Incerto'), e "prediction_goals" (previsão para Total de Golos: 'Mais de 2.5', 'Menos de 2.5' ou 'Incerto'). O JSON deve ter o formato: {"title": "<título>", "summary": "<resumo>", "prediction_btts": "<previsão>", "prediction_goals": "<previsão>"}`;
+
+    try {
+        const analysisResult = await callGeminiAPI(prompt);
+        return analysisResult;
+    } catch (error) {
+        functions.logger.error("Erro ao chamar a Gemini para análise tática:", error);
+        throw new functions.https.HttpsError("internal", "Falha na análise tática pela I.A.", error.message);
+    }
+});
+
+// *** FIM DAS NOVAS FUNÇÕES ***
+
 
 /**
  * Função central para fazer chamadas à API-Football no ambiente Node.js

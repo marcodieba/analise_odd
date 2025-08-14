@@ -4,18 +4,25 @@ import React from 'react';
 import { kellyCriterion } from '../utils/math'; // Importar se for usar o stake
 
 const BetRow = ({ bet, onAddToSlip, isInSlip }) => {
+    const probDisplay = typeof bet.prob === 'number' ? (bet.prob * 100).toFixed(1) : '--';
+    const oddDisplay = typeof bet.odd === 'number' ? bet.odd.toFixed(2) : '--';
+
     return (
         <div className="bg-gray-700/50 p-3 rounded-lg flex items-center justify-between">
             <div>
                 <p className="text-xs text-emerald-300">{bet.market}</p>
                 <p className="font-bold text-white">{bet.outcome}</p>
                 <div className="flex items-center space-x-2 text-xs mt-1">
-                    <span className="text-gray-400">Prob: <span className="font-bold text-white">{(bet.prob * 100).toFixed(1)}%</span></span>
-                    <span className="text-gray-400">EV: <span className="font-bold text-green-400">+{bet.value.toFixed(2)}%</span></span>
+                    <span className="text-gray-400">Prob: <span className="font-bold text-white">{probDisplay + '%'}</span></span>
+                    <span className="text-gray-400">
+  EV: <span className="font-bold text-green-400">
+    {typeof bet.value === 'number' ? `+${bet.value.toFixed(2)}%` : '--'}
+  </span>
+</span>
                 </div>
             </div>
             <div className="text-right">
-                <p className="font-mono text-white text-xl font-bold">{bet.odd.toFixed(2)}</p>
+                <p className="font-mono text-white text-xl font-bold">{oddDisplay}</p>
                 <p className="text-xs text-emerald-400 font-semibold">{bet.bookmakerName}</p>
                 <button
                     onClick={() => onAddToSlip(bet)}
@@ -47,4 +54,5 @@ const UnifiedFixtureCard = ({ fixtureName, bets, onAddToSlip, selectedBets }) =>
     );
 };
 
+export { BetRow };
 export default UnifiedFixtureCard;

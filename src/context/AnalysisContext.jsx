@@ -1,4 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
+// *** INÍCIO DAS NOVAS IMPORTAÇÕES ***
+import { getFunctions, httpsCallable } from 'firebase/functions';
+// *** FIM DAS NOVAS IMPORTAÇÕES ***
 import { poisson, kellyCriterion } from '../utils/math.js';
 import { getCache, setCache } from '../utils/cache.js';
 
@@ -8,6 +11,13 @@ const API_HOST = 'api-football-v1.p.rapidapi.com';
 const CURRENT_SEASON = new Date().getFullYear();
 const PREVIOUS_SEASON = CURRENT_SEASON - 1;
 const BOOKMAKER_ID = 8; // ID para Bet365
+
+// *** INÍCIO DA NOVA CONFIGURAÇÃO ***
+// Inicializa as Firebase Functions
+const functions = getFunctions();
+const analyzeSentimentFn = httpsCallable(functions, 'analyzeSentiment');
+const analyzeH2HTacticsFn = httpsCallable(functions, 'analyzeH2HTactics');
+// *** FIM DA NOVA CONFIGURAÇÃO ***
 
 export const AnalysisProvider = ({ children }) => {
   const [analysisState, setAnalysisState] = useState({
@@ -710,32 +720,17 @@ export const AnalysisProvider = ({ children }) => {
             }
 
             const titles = newsData[team].map(article => article.title).join('\n');
-            const prompt = `Você é um analista desportivo. Com base nestes títulos de notícias sobre a equipa "${name}", analise o sentimento geral. Considere pressão, harmonia, lesões e confiança. Devolva um JSON com uma pontuação de "moral" de -5 (muito negativo) a +5 (muito positivo) e um "resumo" de uma frase. O JSON deve ter o formato: {"score": <numero>, "summary": "<resumo>"}`;
             
+            // *** INÍCIO DA LÓGICA ALTERADA ***
             try {
-                const payload = {
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { responseMimeType: "application/json" }
-                };
-                const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) throw new Error(`Erro na API Gemini: ${response.statusText}`);
-                
-                const result = await response.json();
-                const text = result.candidates[0].content.parts[0].text;
-                return JSON.parse(text);
-
+                // Chama a Firebase Function em vez da API diretamente
+                const result = await analyzeSentimentFn({ newsTitles: titles, teamName: name });
+                return result.data; // A Firebase Function retorna um objeto com uma propriedade `data`
             } catch (err) {
                 console.error("Erro na análise de sentimento com I.A.:", err);
                 return { score: 0, summary: "Falha na análise de I.A.", error: "Erro na I.A." };
             }
+            // *** FIM DA LÓGICA ALTERADA ***
         };
         
         const homeAnalysis = await analyzeTeam('home', teamNames.home.name);
@@ -752,32 +747,19 @@ export const AnalysisProvider = ({ children }) => {
             `Jogo: ${f.teams.home.name} ${f.goals.home} - ${f.goals.away} ${f.teams.away.name}`
         ).join('; ');
 
-        const prompt = `Você é um tático de futebol de elite. Com base nos dados dos últimos confrontos diretos entre ${teams.home.name} e ${teams.away.name}: "${formattedHistory}", identifique padrões táticos. Os jogos costumam ter muitos ou poucos golos? Existe um padrão de resultados que se repete? Devolva um JSON com "title" (um título para o padrão), "summary" (um resumo tático de uma frase), "prediction_btts" (previsão para Ambas Marcam: 'Sim', 'Não' ou 'Incerto'), e "prediction_goals" (previsão para Total de Golos: 'Mais de 2.5', 'Menos de 2.5' ou 'Incerto'). O JSON deve ter o formato: {"title": "<título>", "summary": "<resumo>", "prediction_btts": "<previsão>", "prediction_goals": "<previsão>"}`;
-
+        // *** INÍCIO DA LÓGICA ALTERADA ***
         try {
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
-            };
-            const geminiApiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+            const result = await analyzeH2HTacticsFn({
+                formattedHistory,
+                homeTeam: teams.home.name,
+                awayTeam: teams.away.name,
             });
-
-            if (!response.ok) throw new Error(`Erro na API Gemini: ${response.statusText}`);
-            
-            const result = await response.json();
-            const text = result.candidates[0].content.parts[0].text;
-            updateAnalysisState({ tacticalAnalysis: { loading: false, data: JSON.parse(text), error: false } });
-
+            updateAnalysisState({ tacticalAnalysis: { loading: false, data: result.data, error: false } });
         } catch (err) {
             console.error("Erro na análise tática com I.A.:", err);
             updateAnalysisState({ tacticalAnalysis: { loading: false, data: null, error: true } });
         }
+        // *** FIM DA LÓGICA ALTERADA ***
     };
 
     const runAutoAnalysis = () => {

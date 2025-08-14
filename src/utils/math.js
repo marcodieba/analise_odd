@@ -1,9 +1,27 @@
+// src/utils/math.js
+
+/**
+ * Calcula o fatorial de um número de forma iterativa (mais eficiente).
+ * @param {number} n - O número para o qual calcular o fatorial.
+ * @returns {number} O resultado do fatorial.
+ */
 export const factorial = (n) => {
-    if (n < 0) return -1;
-    if (n === 0) return 1;
-    return n * factorial(n - 1);
+    if (n < 0) return -1; // Fatorial de número negativo não existe.
+    if (n === 0) return 1; // Fatorial de 0 é 1.
+    
+    let result = 1;
+    for (let i = 2; i <= n; i++) {
+        result *= i;
+    }
+    return result;
 };
 
+/**
+ * Calcula a probabilidade de Poisson.
+ * @param {number} lambda - A média de ocorrências (ex: golos esperados).
+ * @param {number} k - O número de ocorrências que se quer calcular a probabilidade.
+ * @returns {number} A probabilidade de Poisson.
+ */
 export const poisson = (lambda, k) => {
     return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
 };

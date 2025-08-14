@@ -164,18 +164,39 @@ function App() {
             const homeGoals = goals.home;
             const awayGoals = goals.away;
             let isBetWon = false;
-
+            
+            // *** INÍCIO DA LÓGICA ATUALIZADA ***
             switch (bet.market) {
                 case 'Resultado Final':
                     if (bet.outcome.includes('Casa')) isBetWon = homeGoals > awayGoals;
                     else if (bet.outcome.includes('Empate')) isBetWon = homeGoals === awayGoals;
                     else if (bet.outcome.includes('Visitante')) isBetWon = homeGoals < awayGoals;
                     break;
+                
+                case 'Dupla Chance':
+                    if (bet.outcome.includes('Casa ou Empate')) isBetWon = homeGoals >= awayGoals;
+                    else if (bet.outcome.includes('Visitante ou Empate')) isBetWon = awayGoals >= homeGoals;
+                    else if (bet.outcome.includes('Casa ou Visitante')) isBetWon = homeGoals !== awayGoals;
+                    break;
+
+                case 'Total de Golos': // Assumindo o mercado "Total de Golos 2.5"
+                    const totalGoals = homeGoals + awayGoals;
+                    if (bet.outcome.includes('Mais de 2.5')) isBetWon = totalGoals > 2.5;
+                    else if (bet.outcome.includes('Menos de 2.5')) isBetWon = totalGoals < 2.5;
+                    break;
+                
                 case 'Ambas Marcam':
                     if (bet.outcome === 'Sim') isBetWon = homeGoals > 0 && awayGoals > 0;
                     else if (bet.outcome === 'Não') isBetWon = homeGoals === 0 || awayGoals === 0;
                     break;
+                
+                // Adicione outros mercados que você suporta aqui...
+                default:
+                    // Se o mercado não for reconhecido, mantém a aposta como pendente
+                    console.warn(`Mercado não reconhecido para resolução: ${bet.market}`);
+                    return bet;
             }
+            // *** FIM DA LÓGICA ATUALIZADA ***
 
             const stakeAmount = (bet.stake / 100) * bankroll;
             return {

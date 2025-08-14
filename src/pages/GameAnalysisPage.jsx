@@ -2,20 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAnalysisEngine } from '../hooks/useAnalysisEngine';
-import CorrectScorePanel from '../components/CorrectScorePanel.jsx';
-import FixtureErrorCard from '../components/FixtureErrorCard.jsx';
 import PowerScoreCard from '../components/PowerScoreCard.jsx';
-import MarketOpportunityCard from '../components/MarketOpportunityCard.jsx';
-import GreenAnalysisCard from '../components/GreenAnalysisCard.jsx';
-import HighProbabilityCard from '../components/HighProbabilityCard.jsx';
+import FixtureErrorCard from '../components/FixtureErrorCard.jsx';
 import SkeletonLoader from '../components/SkeletonLoader.jsx';
-import PredictionGauge from '../components/PredictionGauge';
+import PredictionSummaryCard from '../components/PredictionSummaryCard.jsx';
+import GreenSuggestionsCard from '../components/GreenSuggestionsCard.jsx'; // NOVO
 
 const CURRENT_SEASON = new Date().getFullYear();
 
 export default function GameAnalysisPage({ onRegisterBet }) {
-    const { loading, error: engineError, apiFetch, runFullAnalysis, fetchLeagueContext } = useAnalysisEngine();
-
+    const { loading, error: engineError, apiFetch, runFullAnalysis } = useAnalysisEngine();
+    
     const [leagues, setLeagues] = useState([]);
     const [fixtures, setFixtures] = useState([]);
     const [selectedLeague, setSelectedLeague] = useState('');
@@ -24,20 +21,12 @@ export default function GameAnalysisPage({ onRegisterBet }) {
 
     const handleRegister = (bet) => {
         if (!bet) return;
-        onRegisterBet({
-            fixtureId: parseInt(selectedFixtureId),
-            fixture: analysisResult?.fixtureName || "Jogo Desconhecido",
-            market: bet.market,
-            outcome: bet.outcome,
-            odd: bet.odd,
-            stake: (bet.kellyStake || 0.01) * 100,
-        });
+        onRegisterBet(bet);
     };
 
     const fetchLeagues = useCallback(async () => {
         const data = await apiFetch(`v3/leagues?season=${CURRENT_SEASON}`);
         if (data) {
-            // A API retorna um objeto `league` e um `country`. Vamos guardar tudo.
             const sortedLeagues = data.sort((a, b) => a.country.name.localeCompare(b.country.name) || a.league.name.localeCompare(b.name));
             setLeagues(sortedLeagues);
         }
@@ -62,60 +51,25 @@ export default function GameAnalysisPage({ onRegisterBet }) {
         if (selectedFixtureId) {
             setAnalysisResult(null);
             const fixture = fixtures.find(f => f.fixture.id.toString() === selectedFixtureId);
-            
-            // CORREÇÃO DEFINITIVA: Encontra o objeto da liga completo na nossa lista de ligas
-            // que contém a propriedade `type` ('League' ou 'Cup')
-            const fullLeagueInfo = leagues.find(l => l.league.id === fixture.league.id);
-
-            if (fixture && fullLeagueInfo) {
-                // Cria um novo objeto `league` para a análise que combina o país e os detalhes da liga.
-                const leagueForAnalysis = {
-                    ...fullLeagueInfo.league,
-                    country: fullLeagueInfo.country.name
-                };
-
-                const fixtureForAnalysis = {
-                    ...fixture,
-                    league: leagueForAnalysis
-                }
-
-                const leagueContext = await fetchLeagueContext(fixture.league.id);
-                const result = await runFullAnalysis(fixtureForAnalysis, leagueContext);
+            if (fixture) {
+                const result = await runFullAnalysis(fixture);
                 setAnalysisResult(result);
-            } else {
-                setAnalysisResult({ fixtureName: `${fixture.teams.home.name} vs ${fixture.teams.away.name}`, error: "Não foi possível encontrar os detalhes completos da liga." });
             }
         }
     };
     
-    const valuableBets = analysisResult?.valuableBets || [];
-    const marketsWithValue = valuableBets.reduce((acc, bet) => {
-        if (!acc[bet.market]) acc[bet.market] = {};
-        acc[bet.market][bet.outcome] = bet;
-        return acc;
-    }, {});
-    const highProbValuableBets = valuableBets.filter(bet => bet.prob > 0.55);
-    const greenBetAnalysis = {
-        bestBet: [...highProbValuableBets].sort((a, b) => b.value - a.value)[0], 
-        secondBestBet: [...highProbValuableBets].sort((a, b) => b.value - a.value)[1] || null
-    };
-    const highProbAnalysisData = {
-        bestBet: [...valuableBets].sort((a,b) => b.prob - a.prob)[0], 
-        justification: "Resultado com a maior probabilidade estatística."
-    };
-
     return (
         <div className="max-w-7xl mx-auto">
             <header className="text-center mb-8">
                 <h1 className="text-4xl font-bold text-emerald-400">🔍 Análise de Jogo</h1>
-                <p className="text-gray-400 mt-2">Uma visão completa com estatísticas, previsões e oportunidades de valor.</p>
+                <p className="text-gray-400 mt-2">Análise Preditiva com Foco em Green.</p>
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                 <div className="lg:col-span-2 bg-gray-800 p-6 rounded-lg shadow-lg self-start sticky top-6">
                     <h2 className="text-2xl font-bold text-white mb-4">Selecionar Jogo</h2>
                     <div className="space-y-4">
-                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3">
+                         <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3">
                             <option value="">Selecione uma Liga</option>
                             {leagues.map(l => <option key={l.league.id} value={l.league.id}>{l.country.name} - {l.league.name}</option>)}
                         </select>
@@ -140,15 +94,20 @@ export default function GameAnalysisPage({ onRegisterBet }) {
                             {analysisResult.error && <FixtureErrorCard fixtureName={analysisResult.fixtureName} error={analysisResult.error} />}
                             {!analysisResult.error && (
                                 <>
-                                    <PredictionGauge prediction={analysisResult.prediction} />
-                                    <PowerScoreCard analysisResult={analysisResult} />
-                                    <CorrectScorePanel analysisResults={[analysisResult]} />
-                                    <GreenAnalysisCard analysis={greenBetAnalysis} onRegister={() => handleRegister(greenBetAnalysis.bestBet)} />
-                                    <HighProbabilityCard analysis={highProbAnalysisData} onRegister={() => handleRegister(highProbAnalysisData.bestBet)} />
+                                    <PredictionSummaryCard 
+                                        prediction={analysisResult.mainPrediction}
+                                        narrative={analysisResult.narrative}
+                                    />
                                     
-                                    {Object.entries(marketsWithValue).map(([market, outcomes]) => (
-                                        <MarketOpportunityCard key={market} marketTitle={market} outcomes={outcomes} onRegister={(betData) => handleRegister(betData)} />
-                                    ))}
+                                    {/* COMPONENTE SUBSTITUÍDO */}
+                                    <GreenSuggestionsCard 
+                                        suggestions={analysisResult.greenSuggestions}
+                                        fixtureName={analysisResult.fixtureName}
+                                        fixtureId={analysisResult.fixtureId}
+                                        onRegister={handleRegister}
+                                    />
+
+                                    <PowerScoreCard analysisResult={analysisResult} />
                                 </>
                             )}
                         </div>

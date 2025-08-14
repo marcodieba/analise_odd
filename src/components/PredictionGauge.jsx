@@ -1,3 +1,5 @@
+// src/components/PredictionGauge.jsx
+
 import React from 'react';
 
 const PredictionGauge = ({ prediction }) => {
@@ -16,7 +18,7 @@ const PredictionGauge = ({ prediction }) => {
         'Média': { color: 'bg-yellow-500', text: 'Média' },
         'Baixa': { color: 'bg-red-500', text: 'Baixa' },
     };
-    const currentConfidence = confidenceConfig[confidence];
+    const currentConfidence = confidenceConfig[confidence] || confidenceConfig['Média'];
 
     return (
         <div className="bg-gradient-to-br from-emerald-900 via-gray-800 to-gray-800 p-6 rounded-lg shadow-lg border border-emerald-500/50">
@@ -32,7 +34,7 @@ const PredictionGauge = ({ prediction }) => {
                         stroke="currentColor"
                         strokeWidth="10"
                         strokeDasharray={2 * Math.PI * 70}
-                        strokeDashoffset={(2 * Math.PI * 70) * (1 - probability / 100)}
+                        strokeDashoffset={(2 * Math.PI * 70) * (1 - (probability / 100))}
                         className="text-emerald-400"
                         fill="transparent"
                         style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}

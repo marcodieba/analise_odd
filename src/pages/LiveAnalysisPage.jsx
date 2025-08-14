@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import LiveDashboard from '../components/LiveDashboard.jsx';
+// *** NOVO: Importa a função centralizada ***
+import { apiFetch } from '../utils/apiService';
 
-// --- Constantes da API ---
-const API_HOST = 'api-football-v1.p.rapidapi.com';
-
-// --- Componente da Lista de Jogos ---
+// --- Componente da Lista de Jogos (sem alterações) ---
 const LiveGamesList = ({ games, onGameSelect }) => (
     <div className="space-y-3">
         {games.map(game => (
@@ -30,10 +29,9 @@ const LiveGamesList = ({ games, onGameSelect }) => (
 );
 
 export default function LiveAnalysisPage() {
-    // A chave da API agora é lida do ficheiro .env.local
     const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY; 
 
-    const [allOpportunities, setAllOpportunities] = useState([]); // Guarda apenas os jogos que são oportunidades
+    const [allOpportunities, setAllOpportunities] = useState([]);
     const [liveLeagues, setLiveLeagues] = useState([]);
     const [selectedLeague, setSelectedLeague] = useState('');
     const [filteredGames, setFilteredGames] = useState([]);
@@ -41,20 +39,16 @@ export default function LiveAnalysisPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const fetchAllLiveOpportunities = async () => {
+    // *** ALTERADO: A função de busca foi envolvida em useCallback ***
+    const fetchAllLiveOpportunities = useCallback(async () => {
+        // Não define o loading se for uma atualização em segundo plano e já houver um jogo selecionado
         if (!selectedGame) {
              setLoading(true);
         }
         setError('');
         try {
-            const response = await fetch(`https://${API_HOST}/v3/fixtures?live=all`, {
-                method: 'GET',
-                headers: { 'x-rapidapi-host': API_HOST, 'x-rapidapi-key': apiKey },
-            });
-            const data = await response.json();
-            if (data.errors && Object.keys(data.errors).length > 0) throw new Error(JSON.stringify(data.errors));
-            
-            const games = data.response || [];
+            // *** ALTERADO: Utiliza a função apiFetch centralizada ***
+            const games = await apiFetch('v3/fixtures?live=all');
             
             // FILTRO INTELIGENTE: A busca principal agora foca-se apenas nas oportunidades
             const opportunities = games.filter(game => {
@@ -65,7 +59,6 @@ export default function LiveAnalysisPage() {
 
             setAllOpportunities(opportunities);
 
-            // Cria a lista de ligas a partir das oportunidades encontradas
             const uniqueLeagues = opportunities.reduce((acc, game) => {
                 if (!acc.some(league => league.id === game.league.id)) {
                     acc.push(game.league);
@@ -76,26 +69,27 @@ export default function LiveAnalysisPage() {
             setLiveLeagues(uniqueLeagues.sort((a,b) => a.name.localeCompare(b.name)));
 
         } catch (err) {
+            // O erro lançado pela apiFetch centralizada é capturado aqui
             setError(`Erro ao buscar jogos ao vivo: ${err.message}`);
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedGame]); // A dependência agora é `selectedGame`
 
+    // *** ALTERADO: O useEffect agora depende da função memorizada (useCallback) ***
     useEffect(() => {
         if (apiKey) {
             fetchAllLiveOpportunities();
             const interval = setInterval(fetchAllLiveOpportunities, 60000);
             return () => clearInterval(interval);
         }
-    }, [apiKey]);
+    }, [apiKey, fetchAllLiveOpportunities]);
 
     useEffect(() => {
         if (selectedLeague) {
             const gamesInLeague = allOpportunities.filter(game => game.league.id.toString() === selectedLeague);
             setFilteredGames(gamesInLeague);
         } else {
-            // Se nenhuma liga estiver selecionada, mostra todas as oportunidades encontradas
             setFilteredGames(allOpportunities);
         }
     }, [selectedLeague, allOpportunities]);
@@ -107,7 +101,7 @@ export default function LiveAnalysisPage() {
                 setSelectedGame(null);
             }
         }
-    }, [allOpportunities]);
+    }, [allOpportunities, selectedGame]);
 
     if (selectedGame) {
         return <LiveDashboard game={selectedGame} onBack={() => setSelectedGame(null)} apiKey={apiKey} />;
