@@ -1,17 +1,19 @@
 // src/pages/GameAnalysisPage.jsx
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useAnalysisEngine } from '../hooks/useAnalysisEngine';
+import { useAnalysisEngine } from '../hooks/useAnalysisEngine'; // VOLTAMOS A USAR O HOOK
+import MLPredictionCard from '../components/MLPredictionCard.jsx'; // O novo card de ML
 import PowerScoreCard from '../components/PowerScoreCard.jsx';
 import FixtureErrorCard from '../components/FixtureErrorCard.jsx';
 import SkeletonLoader from '../components/SkeletonLoader.jsx';
 import PredictionSummaryCard from '../components/PredictionSummaryCard.jsx';
-import GreenSuggestionsCard from '../components/GreenSuggestionsCard.jsx'; // NOVO
+import GreenSuggestionsCard from '../components/GreenSuggestionsCard.jsx';
 
 const CURRENT_SEASON = new Date().getFullYear();
 
 export default function GameAnalysisPage({ onRegisterBet }) {
-    const { loading, error: engineError, apiFetch, runFullAnalysis } = useAnalysisEngine();
+    // A LÓGICA VOLTA A SER CONTROLADA PELO HOOK DIRETAMENTE NA PÁGINA
+    const { loading, error: engineError, apiFetch, runFullAnalysis, mlPrediction } = useAnalysisEngine();
     
     const [leagues, setLeagues] = useState([]);
     const [fixtures, setFixtures] = useState([]);
@@ -61,8 +63,8 @@ export default function GameAnalysisPage({ onRegisterBet }) {
     return (
         <div className="max-w-7xl mx-auto">
             <header className="text-center mb-8">
-                <h1 className="text-4xl font-bold text-emerald-400">🔍 Análise de Jogo</h1>
-                <p className="text-gray-400 mt-2">Análise Preditiva com Foco em Green.</p>
+                 <h1 className="text-4xl font-bold text-emerald-400">🔍 Análise de Jogo</h1>
+                <p className="text-gray-400 mt-2">Análise Preditiva com Modelo Híbrido (Estatístico + I.A.).</p>
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -94,12 +96,17 @@ export default function GameAnalysisPage({ onRegisterBet }) {
                             {analysisResult.error && <FixtureErrorCard fixtureName={analysisResult.fixtureName} error={analysisResult.error} />}
                             {!analysisResult.error && (
                                 <>
+                                    {/* CARD DE ML EM DESTAQUE NO TOPO */}
+                                    <MLPredictionCard 
+                                        prediction={mlPrediction.data} 
+                                        status={mlPrediction.status} 
+                                    />
+                                    
                                     <PredictionSummaryCard 
                                         prediction={analysisResult.mainPrediction}
                                         narrative={analysisResult.narrative}
                                     />
                                     
-                                    {/* COMPONENTE SUBSTITUÍDO */}
                                     <GreenSuggestionsCard 
                                         suggestions={analysisResult.greenSuggestions}
                                         fixtureName={analysisResult.fixtureName}

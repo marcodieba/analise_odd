@@ -1,5 +1,6 @@
+// src/components/AnalysisResultCard.jsx
+
 import React, { useState } from 'react';
-import ResultMetric from './ResultMetric.jsx';
 import H2HAnalysisCard from './H2HAnalysisCard.jsx';
 import MomentumAnalysisCard from './MomentumAnalysisCard.jsx';
 import LineupAnalysisCard from './LineupAnalysisCard.jsx';
@@ -7,9 +8,8 @@ import StyleClashCard from './StyleClashCard.jsx';
 import BTTSAnalysisCard from './BTTSAnalysisCard.jsx';
 import SentimentAnalysisCard from './SentimentAnalysisCard.jsx';
 import TacticalAIAnalysisCard from './TacticalAIAnalysisCard.jsx';
-import MarketOpportunityCard from './MarketOpportunityCard.jsx';
-import GreenAnalysisCard from './GreenAnalysisCard.jsx';
-import HighProbabilityCard from './HighProbabilityCard.jsx';
+// NOVO: Importa o nosso novo card genérico
+import BetSuggestionCard from './BetSuggestionCard.jsx';
 
 const AnalysisResultCard = ({ analysis, onRegisterBet }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -39,6 +39,13 @@ const AnalysisResultCard = ({ analysis, onRegisterBet }) => {
             ...betData,
         });
     };
+    
+    // Simplifica a busca pela melhor oportunidade de valor para cada mercado
+    const findBestValueBet = (marketOutcomes) => {
+        const valueBets = Object.values(marketOutcomes || {}).filter(data => data.value > 0.01);
+        if (valueBets.length === 0) return null;
+        return valueBets.sort((a, b) => b.prob - a.prob)[0];
+    };
 
     return (
         <div className="bg-gray-800 rounded-lg border border-gray-700">
@@ -54,31 +61,48 @@ const AnalysisResultCard = ({ analysis, onRegisterBet }) => {
             
             {isOpen && (
                 <div className="p-4 border-t border-gray-700 space-y-6">
-                    {/* Resumo Rápido */}
+                    {/* Resumo Rápido com o novo componente */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <GreenAnalysisCard analysis={greenAnalysis} onRegister={() => handleRegister({
-                            market: greenAnalysis?.bestBet?.outcome,
-                            odd: greenAnalysis?.bestBet?.odd,
-                            stake: (greenAnalysis?.bestBet?.kellyStake || 0) * 100
-                        })} />
-                        <HighProbabilityCard analysis={highProbAnalysis} onRegister={() => handleRegister({
-                            market: highProbAnalysis?.bestBet?.outcome,
-                            odd: highProbAnalysis?.bestBet?.odd,
-                            stake: (highProbAnalysis?.bestBet?.kellyStake || 0) * 100
-                        })} />
+                        <BetSuggestionCard
+                            title="Oportunidade Green"
+                            bet={greenAnalysis?.bestBet}
+                            onRegister={() => handleRegister(greenAnalysis?.bestBet)}
+                            variant="green"
+                        />
+                        <BetSuggestionCard
+                            title="Aposta Mais Provável"
+                            bet={highProbAnalysis?.bestBet}
+                            onRegister={() => handleRegister(highProbAnalysis?.bestBet)}
+                            variant="high-prob"
+                        />
                     </div>
 
-                    {/* Análise de Valor por Mercado */}
+                    {/* Análise de Valor por Mercado com o novo componente */}
                     <div>
                         <h3 className="text-xl font-bold text-white mb-4">Análise de Valor por Mercado</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <MarketOpportunityCard marketTitle="1X2" outcomes={results['1X2']} onRegister={(bet) => handleRegister(bet)} />
-                            <MarketOpportunityCard marketTitle="Dupla Chance" outcomes={results['DoubleChance']} onRegister={(bet) => handleRegister(bet)} />
-                            <MarketOpportunityCard marketTitle="Ambas Marcam" outcomes={results['BTTS']} onRegister={(bet) => handleRegister(bet)} />
+                            <BetSuggestionCard
+                                title="1X2"
+                                bet={findBestValueBet(results['1X2'])}
+                                onRegister={() => handleRegister(findBestValueBet(results['1X2']))}
+                                variant="default"
+                            />
+                             <BetSuggestionCard
+                                title="Dupla Chance"
+                                bet={findBestValueBet(results['DoubleChance'])}
+                                onRegister={() => handleRegister(findBestValueBet(results['DoubleChance']))}
+                                variant="default"
+                            />
+                             <BetSuggestionCard
+                                title="Ambas Marcam"
+                                bet={findBestValueBet(results['BTTS'])}
+                                onRegister={() => handleRegister(findBestValueBet(results['BTTS']))}
+                                variant="default"
+                            />
                         </div>
                     </div>
 
-                    {/* Análises Qualitativas e Contextuais */}
+                    {/* Análises Qualitativas e Contextuais (sem alteração) */}
                     <div>
                         <h3 className="text-xl font-bold text-white mb-4">Contexto e Análises Adicionais</h3>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

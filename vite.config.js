@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import UnoCSS from 'unocss/vite' // Importa o UnoCSS
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    UnoCSS(), // Adiciona o plugin do UnoCSS
+  ],
 })

@@ -1,9 +1,12 @@
+// src/pages/AuthPage.jsx
+
 import React, { useState } from 'react';
 import { 
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword 
 } from "firebase/auth";
-import { auth } from '../firebase'; // Importa a configuração do Firebase
+import { auth } from '../firebase';
+import styles from './AuthPage.module.css'; // Importa os nossos novos estilos
 
 export default function AuthPage() {
     const [isLogin, setIsLogin] = useState(true);
@@ -18,53 +21,61 @@ export default function AuthPage() {
         try {
             if (isLogin) {
                 await signInWithEmailAndPassword(auth, email, password);
-                // O login bem-sucedido será detetado pelo listener no App.jsx
             } else {
                 await createUserWithEmailAndPassword(auth, email, password);
-                // O registo bem-sucedido também fará o login automático
             }
         } catch (err) {
-            setError(err.message);
+            // Assegura que o erro é uma string para evitar problemas de renderização
+            setError(err.message || 'Ocorreu um erro desconhecido.');
         }
     };
 
     return (
-        <div className="flex items-center justify-center min-h-[80vh]">
-            <div className="w-full max-w-md bg-gray-800 p-8 rounded-lg shadow-lg">
-                <h1 className="text-3xl font-bold text-center text-emerald-400 mb-6">
+        <div className={styles.container}>
+            <div className={styles.card}>
+                <h1 className={styles.title}>
                     {isLogin ? 'Iniciar Sessão' : 'Criar Conta'}
                 </h1>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <input
-                        type="email"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <input
-                        type="password"
-                        placeholder="Palavra-passe"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        minLength="6"
-                        className="w-full bg-gray-700 border border-gray-600 text-white rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
+                <form onSubmit={handleSubmit} className={styles.form}>
+                    <div className={styles.inputGroup}>
+                        <label htmlFor="email" className={styles.label}>Email</label>
+                        <input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            className={styles.inputField}
+                        />
+                    </div>
+
+                    <div className={styles.inputGroup}>
+                        <label htmlFor="password" className={styles.label}>Palavra-passe</label>
+                        <input
+                            id="password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            minLength="6"
+                            className={styles.inputField}
+                        />
+                    </div>
+                    
                     <button 
                         type="submit"
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition"
+                        className={styles.submitButton}
                     >
                         {isLogin ? 'Entrar' : 'Registar'}
                     </button>
-                    {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+                    {error && <p className={styles.errorText}>{error}</p>}
                 </form>
-                <p className="text-center text-gray-400 text-sm mt-6">
+                <p className={styles.toggleText}>
                     {isLogin ? 'Ainda não tem uma conta?' : 'Já tem uma conta?'}
                     <button 
+                        type="button" // Adicionado para evitar submissão do formulário
                         onClick={() => setIsLogin(!isLogin)}
-                        className="font-medium text-emerald-400 hover:underline ml-2"
+                        className={styles.toggleButton}
                     >
                         {isLogin ? 'Registe-se' : 'Inicie a sessão'}
                     </button>

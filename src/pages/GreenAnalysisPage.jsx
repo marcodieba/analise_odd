@@ -1,7 +1,11 @@
+// src/pages/GreenAnalysisPage.jsx
+
 import React, { useState, useEffect } from 'react';
 import { useAnalysisEngine } from '../hooks/useAnalysisEngine';
+// NOVO: Importa o overlay de carregamento
+import LoadingOverlay from '../components/LoadingOverlay.jsx';
 
-// --- Componente da Tabela de Resultados ---
+// --- Componente da Tabela de Resultados (sem alterações) ---
 const GreenResultsTable = ({ results }) => (
     <div className="bg-gray-800 rounded-lg overflow-x-auto">
         <h2 className="text-2xl font-bold text-white p-6">Oportunidades "Green" Encontradas</h2>
@@ -41,7 +45,7 @@ export default function GreenAnalysisPage() {
     const [loadingPage, setLoadingPage] = useState(false);
     const [results, setResults] = useState([]);
     const [pageError, setPageError] = useState('');
-    const [progressMessage, setProgressMessage] = useState(''); // Novo estado para feedback de progresso
+    const [progressMessage, setProgressMessage] = useState('');
 
     const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY;
 
@@ -108,6 +112,9 @@ export default function GreenAnalysisPage() {
 
     return (
         <div className="max-w-7xl mx-auto">
+             {/* NOVO: Componente de overlay em ação */}
+             <LoadingOverlay isLoading={loadingPage} message={progressMessage} />
+
              <header className="text-center mb-8">
                 <h1 className="text-4xl font-bold text-emerald-400">Análise Green</h1>
                 <p className="text-gray-400 mt-2 max-w-2xl mx-auto">
@@ -146,7 +153,9 @@ export default function GreenAnalysisPage() {
 
             {(pageError || engineError) && <div className="bg-red-500/20 text-red-300 p-3 rounded-md mb-8">{pageError || engineError}</div>}
             
-            {loadingPage && <p className="text-center text-lg text-emerald-400">{progressMessage}</p>}
+            {/* REMOVIDO: a mensagem de progresso agora está no overlay
+            {loadingPage && <p className="text-center text-lg text-emerald-400">{progressMessage}</p>} 
+            */}
 
             {!loadingPage && results.length > 0 && <GreenResultsTable results={results} />}
             

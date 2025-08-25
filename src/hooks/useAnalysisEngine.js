@@ -1,11 +1,21 @@
 // src/hooks/useAnalysisEngine.js
+
 import { useState, useCallback } from 'react';
 import { kellyCriterion } from '../utils/math';
 import { apiFetch as centralizedApiFetch } from '../utils/apiService';
 
-const CURRENT_SEASON = new Date().getFullYear();
+// --- NOVA IMPORTAÇÃO ---
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
-// Funções utilitárias
+// --- NOVA CONFIGURAÇÃO ---
+const functions = getFunctions();
+const predictFixtureWithMLFn = httpsCallable(functions, 'predictFixtureWithML');
+
+const CURRENT_SEASON = new Date().getFullYear();
+// O ID da Bet365 é 8. Vamos usar este para as odds que alimentam o modelo de ML.
+const BOOKMAKER_ML_ID = 8; 
+
+// Funções utilitárias (do seu código original)
 const dlv = (obj, key, def) => {
   let p = 0;
   key = key && key.split ? key.split('.') : key;
@@ -45,10 +55,13 @@ const applyHybridAdjustmentToWeights = (weights, context) => {
 export const useAnalysisEngine = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // --- NOVO ESTADO PARA A PREVISÃO DE ML ---
+  const [mlPrediction, setMlPrediction] = useState({ status: 'idle', data: null });
 
   const apiFetch = useCallback(async (endpoint, isCritical = true) => {
+    // Esta função permanece exatamente como você a forneceu
     try {
-      setLoading(true);
+      // setLoading(true); // Removido para ser controlado pela função principal
       if (isCritical) setError('');
       const data = await centralizedApiFetch(endpoint);
       return data;
@@ -58,16 +71,18 @@ export const useAnalysisEngine = () => {
       }
       return []; 
     } finally {
-      setLoading(false);
+      // setLoading(false); // Removido para ser controlado pela função principal
     }
   }, []);
 
   const fetchLeagueContext = useCallback(async (leagueId) => {
+    // Esta função permanece exatamente como você a forneceu
     const league = await apiFetch(`v3/leagues?id=${leagueId}&season=${CURRENT_SEASON}`);
     return league;
   }, [apiFetch]);
 
   const fetchRawDataForModel = useCallback(async (teamId, leagueId) => {
+    // Esta função permanece exatamente como você a forneceu
     const [seasonalStatsData, last10Fixtures, leagueStandings] = await Promise.all([
       apiFetch(`v3/teams/statistics?season=${CURRENT_SEASON}&team=${teamId}&league=${leagueId}`),
       apiFetch(`v3/fixtures?team=${teamId}&last=10&season=${CURRENT_SEASON}`),
@@ -149,6 +164,7 @@ export const useAnalysisEngine = () => {
   }, [apiFetch]);
 
   const fetchOdds = useCallback(async (fixtureId) => {
+    // Esta função permanece exatamente como você a forneceu
     if (!fixtureId) return {};
     const data = await apiFetch(`v3/odds?fixture=${fixtureId}`);
     const oddsByBookmaker = {};
@@ -159,8 +175,71 @@ export const useAnalysisEngine = () => {
     }
     return oddsByBookmaker;
   }, [apiFetch]);
+  
+  // --- NOVA FUNÇÃO AUXILIAR PARA PREPARAR OS DADOS PARA O ML ---
+  const prepareFeaturesForML = (homeLast5, awayLast5, homeId, awayId, oddsData) => {
+      const calculateForm = (fixtures, teamId) => {
+          let formPoints = 0;
+          if (!fixtures || fixtures.length < 5) return null;
+          fixtures.forEach(f => {
+              const isHome = f.teams.home.id === teamId;
+              const isWinner = (isHome && f.teams.home.winner) || (!isHome && f.teams.away.winner);
+              const isDraw = f.teams.home.winner === null && f.teams.away.winner === null;
+              if (isDraw) formPoints += 1;
+              else if (isWinner) formPoints += 3;
+          });
+          return formPoints;
+      };
+
+      const getAverages = (fixtures, teamId) => {
+          if (!fixtures || fixtures.length < 5) return { avgFor: null, avgAgainst: null };
+          let goalsFor = 0;
+          let goalsAgainst = 0;
+          fixtures.forEach(f => {
+              if (f.teams.home.id === teamId) {
+                  goalsFor += f.goals.home;
+                  goalsAgainst += f.goals.away;
+              } else {
+                  goalsFor += f.goals.away;
+                  goalsAgainst += f.goals.home;
+              }
+          });
+          return {
+              avgFor: goalsFor / fixtures.length,
+              avgAgainst: goalsAgainst / fixtures.length
+          };
+      };
+
+      const homeForm = calculateForm(homeLast5, homeId);
+      const awayForm = calculateForm(awayLast5, awayId);
+      const homeAverages = getAverages(homeLast5, homeId);
+      const awayAverages = getAverages(awayLast5, awayId);
+
+      const b365Odds = oddsData[`Bet365`]?.find(b => b.id === 1)?.values;
+      const B365H = b365Odds?.find(o => o.value === 'Home')?.odd;
+      const B365D = b365Odds?.find(o => o.value === 'Draw')?.odd;
+      const B365A = b365Odds?.find(o => o.value === 'Away')?.odd;
+
+      if (homeForm === null || awayForm === null || !B365H || !B365D || !B365A) {
+          console.warn("Faltam dados para o modelo de ML. Features:", {homeForm, awayForm, B365H, B365D, B365A});
+          return null;
+      }
+
+      return {
+          home_form: homeForm,
+          away_form: awayForm,
+          home_avg_goals_for: homeAverages.avgFor,
+          home_avg_goals_against: homeAverages.avgAgainst,
+          away_avg_goals_for: awayAverages.avgFor,
+          away_avg_goals_against: awayAverages.avgAgainst,
+          B365H: parseFloat(B365H),
+          B365D: parseFloat(B365D),
+          B365A: parseFloat(B365A),
+      };
+  };
 
   const runFullAnalysis = useCallback(async (fixture) => {
+    // Esta função permanece exatamente como você a forneceu, com adições
     if (!fixture || !fixture.teams || !fixture.league) {
       return { fixtureName: 'Dados insuficientes', error: 'Fixture incompleto para análise.' };
     }
@@ -171,14 +250,37 @@ export const useAnalysisEngine = () => {
 
     try {
       setLoading(true);
+      setMlPrediction({ status: 'loading', data: null }); // Inicia o carregamento do ML
 
-      const [homeRaw, awayRaw, h2hRaw, oddsData] = await Promise.all([
+      // --- BUSCA DE DADOS EM PARALELO (INCLUINDO DADOS PARA O ML) ---
+      const [
+          homeRaw, awayRaw, h2hRaw, oddsData,
+          homeLast5, awayLast5
+      ] = await Promise.all([
         fetchRawDataForModel(teams.home.id, league.id),
         fetchRawDataForModel(teams.away.id, league.id),
         apiFetch(`v3/fixtures/headtohead?h2h=${teams.home.id}-${teams.away.id}&last=6`, false),
-        fetchOdds(fixtureId)
+        fetchOdds(fixtureId),
+        apiFetch(`v3/fixtures?team=${teams.home.id}&last=5&season=${CURRENT_SEASON}`, false),
+        apiFetch(`v3/fixtures?team=${teams.away.id}&last=5&season=${CURRENT_SEASON}`, false),
       ]);
 
+      // --- LÓGICA DE ML ASSÍNCRONA ---
+      const mlFeatures = prepareFeaturesForML(homeLast5, awayLast5, teams.home.id, teams.away.id, oddsData);
+      if (mlFeatures) {
+          predictFixtureWithMLFn(mlFeatures)
+              .then(mlResult => {
+                  setMlPrediction({ status: 'success', data: mlResult.data });
+              })
+              .catch(err => {
+                  console.error("Erro ao executar a previsão de ML:", err);
+                  setMlPrediction({ status: 'error', data: null });
+              });
+      } else {
+           setMlPrediction({ status: 'error', data: null });
+      }
+      
+      // O resto do seu código original a partir daqui...
       const h2hMatches = Array.isArray(h2hRaw) ? h2hRaw : [];
       const homeWinsH2H = h2hMatches.filter(m => (m.teams.home.id === teams.home.id && m.teams.home.winner) || (m.teams.away.id === teams.home.id && m.teams.away.winner)).length;
       const awayWinsH2H = h2hMatches.filter(m => (m.teams.home.id === teams.away.id && m.teams.home.winner) || (m.teams.away.id === teams.away.id && m.teams.away.winner)).length;
@@ -259,27 +361,19 @@ export const useAnalysisEngine = () => {
         }
       }
 
-      // *** INÍCIO DA NOVA LÓGICA HÍBRIDA PARA O VENCEDOR ***
-      
-      // 1. Probabilidade baseada na Força Geral (IFT)
       const totalIFT = homeIFT + awayIFT;
       const homeWin_fromIFT = homeIFT / totalIFT;
       const awayWin_fromIFT = awayIFT / totalIFT;
-      // Heurística para o empate: a probabilidade de empate é maior quando as forças são mais próximas
       const draw_fromIFT = 1 - Math.abs(homeWin_fromIFT - awayWin_fromIFT);
 
-      // 2. Média Ponderada (50% Golos, 50% IFT)
       const finalHomeWin = (homeWin_fromGoals * 0.5) + (homeWin_fromIFT * 0.5);
       const finalAwayWin = (awayWin_fromGoals * 0.5) + (awayWin_fromIFT * 0.5);
       const finalDraw = (draw_fromGoals * 0.5) + (draw_fromIFT * 0.5);
 
-      // 3. Renormalizar para garantir que a soma seja 1 (100%)
       const finalTotal = finalHomeWin + finalAwayWin + finalDraw;
       const homeWin = finalHomeWin / finalTotal;
       const draw = finalDraw / finalTotal;
       const awayWin = finalAwayWin / finalTotal;
-
-      // *** FIM DA NOVA LÓGICA HÍBRIDA ***
 
 
       const calculateLineProbability = (lambda, line) => {
@@ -432,5 +526,6 @@ export const useAnalysisEngine = () => {
     }
   }, [apiFetch, fetchRawDataForModel, fetchOdds]);
 
-  return { loading, error, apiFetch, runFullAnalysis, fetchLeagueContext, fetchRawDataForModel };
+  // Adiciona mlPrediction ao retorno do hook
+  return { loading, error, apiFetch, runFullAnalysis, fetchLeagueContext, fetchRawDataForModel, mlPrediction };
 };
